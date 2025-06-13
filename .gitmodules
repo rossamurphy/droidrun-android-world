@@ -1,0 +1,6 @@
+[submodule "droidrun"]
+	path = droidrun
+	url = https://github.com/droidrun/droidrun
+[submodule "android_world"]
+	path = android_world
+	url = https://github.com/google-research/android_world.git
