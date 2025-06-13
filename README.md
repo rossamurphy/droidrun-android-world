@@ -2,7 +2,7 @@
 
 This module provides tools for benchmarking DroidRun using the [AndroidWorld](https://github.com/google-research/android_world) task suite - a collection of 116 diverse tasks across 20 Android applications.
 
-## Setup
+## Local Setup
 
 ### Prerequisites
 
@@ -68,6 +68,65 @@ This module provides tools for benchmarking DroidRun using the [AndroidWorld](ht
    ```
    
    This is a one-time setup process that may take several minutes depending on your connection speed. It will install all the necessary apps and configure permissions required by AndroidWorld tasks.
+
+## Docker setup
+
+### Prerequisites
+
+1. **KVM Kernel module**
+
+To run the Android emulator with hardware acceleration in Docker, you must enable KVM (Kernel-based Virtual Machine) on your Linux host.
+
+**Setup steps:**
+
+- **Install KVM and related packages:**
+  ```bash
+  sudo apt update
+  sudo apt install -y qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils
+  ```
+
+- **Add your user to the `kvm` and `libvirt` groups:**
+  ```bash
+  sudo usermod -aG kvm $USER
+  sudo usermod -aG libvirt $USER
+  # Log out and log back in for group changes to take effect
+  ```
+
+- **Verify KVM installation:**
+  ```bash
+  kvm-ok  # On Ubuntu, from cpu-checker package
+  # or
+  lsmod | grep kvm
+  ```
+
+- **Check that your CPU supports virtualization:**
+  ```bash
+  egrep -c '(vmx|svm)' /proc/cpuinfo
+  # Output should be 1 or more
+  ```
+
+- **Ensure `/dev/kvm` exists:**
+  ```bash
+  ls -l /dev/kvm
+  # Should show a character device file
+  ```
+
+If you encounter issues, ensure virtualization is enabled in your BIOS/UEFI settings.
+
+For more details, see the [KVM documentation](https://www.linux-kvm.org/page/Main_Page).
+
+2. **Create an alias for easy of use**
+```bash
+alias droidrun-android-world='docker run --rm -it --name droidrun-android-world \
+   --platform linux/amd64 --device /dev/kvm \
+   -v ./eval_results:/opt/shared/eval_results \
+   -v ./trajectories:/opt/shared/trajectories \
+   ${OPENAI_API_KEY:+-e OPENAI_API_KEY} \
+   ${GEMINI_API_KEY:+-e GEMINI_API_KEY} \
+   ${ANTHROPIC_API_KEY:+-e ANTHROPIC_API_KEY} \
+   droidrun/droidrun-android-world:latest "$@"
+'
+```
 
 ## Usage
 
