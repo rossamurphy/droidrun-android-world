@@ -251,16 +251,13 @@ class AndroidWorldBenchmark:
             task_dir = os.path.join(
                 self.results_dir, f"task_{task_name.replace(' ', '_')}"
             )
-
-            task_result["screenshot_gif"] = agent.trajectory.create_screenshot_gif(
-                output_path=os.path.join(task_dir, f"task_execution")
-            )
+            agent.trajectory.save_trajectory(os.path.join(task_dir))
 
             # Update result with agent information
             task_result = update_result_from_agent(task_result, agent_result, agent)
 
             # Add screenshots to result if available
-            #if hasattr(tools_instance, "screenshots") and tools_instance.screenshots:
+            # if hasattr(tools_instance, "screenshots") and tools_instance.screenshots:
             #    task_result["screenshots"] = tools_instance.screenshots
 
         except Exception as e:

@@ -14,7 +14,7 @@ setup(
     description="Droidrun Android World Benchmark Runner",
     author="Timo Beckmann",
     author_email="timo@droidrun.ai",
-    python_requires=">=3.12",
+    python_requires=">=3.11",
     packages=find_packages(include=["eval", "eval.*"]),
     install_requires=[
         resolve_local_package("droidrun"),

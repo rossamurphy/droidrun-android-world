@@ -1,1 +1,8 @@
 __pycache__/
+eval_results
+trajectories
+.venv
+*.egg-info
+*.apk
+build
+task_progress.json
