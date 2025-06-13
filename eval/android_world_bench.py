@@ -30,12 +30,7 @@ from eval.utils.environment import (
 )
 
 from eval.utils.accessibility import enable_accessibility_service
-from eval.utils.task_manager import (
-    TaskRegistry,
-    initialize_task,
-    check_task_success,
-    teardown_task,
-)
+from eval.utils.task_manager import TaskRegistry
 from eval.utils.results import (
     ResultManager,
     create_task_result,
@@ -226,10 +221,8 @@ class AndroidWorldBenchmark:
         task_result["reasoning"] = reasoning
 
         # Initialize task
-        task_initialized = await initialize_task(self.env, task_instance)
-        if not task_initialized:
-            task_result["error"] = "Failed to initialize task"
-            return task_result
+        self.env.reset(go_home=True)
+        task_instance.initialize_task(self.env)
 
         # Enable accessibility service for the task
         await enable_accessibility_service(
@@ -291,13 +284,15 @@ class AndroidWorldBenchmark:
         task_result["execution_time"] = end_time - start_time
 
         # Check if task was successful
-        task_result["success"] = check_task_success(self.env, task_instance)
+        task_result["success"] = task_instance.is_successful(self.env) == 1.0
 
         if not task_result["success"] and not reasoning and self.reasoning is None:
             logger.info(
                 f"Task {task_name} failed with reasoning disabled. Retrying with reasoning enabled."
             )
-            return await self.run_task(task_id, task_name, task_instance, reasoning=True)
+            return await self.run_task(
+                task_id, task_name, task_instance, reasoning=True
+            )
 
         return task_result
 
@@ -360,7 +355,7 @@ class AndroidWorldBenchmark:
                     logger.error(f"Error running task {task_name}: {e}")
                 finally:
                     # Tear down the task
-                    teardown_task(self.env, task_instance)
+                    task_instance.tear_down(self.env)
 
             # Print summary
             self.result_manager.print_summary()
