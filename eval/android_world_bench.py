@@ -15,6 +15,7 @@ import time
 import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
+import math
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +33,6 @@ from eval.utils.accessibility import enable_accessibility_service
 from eval.utils.task_manager import (
     TaskRegistry,
     initialize_task,
-    get_task_description,
     check_task_success,
     teardown_task,
 )
@@ -44,6 +44,8 @@ from eval.utils.results import (
 )
 from eval.utils.agent import create_agent, run_agent
 from eval.utils.keepalive import OverlayKeepalive, disable_overlay_once
+from android_world import registry
+from android_world.task_evals.task_eval import TaskEval
 
 
 # Now import AndroidWorld modules
@@ -77,7 +79,7 @@ class AndroidWorldBenchmark:
         progress_file: str = "task_progress.json",
         use_keepalive: bool = True,
         keepalive_interval: int = 5,
-        reasoning: bool = False,
+        reasoning: bool | None = None,
     ):
         """Initialize the benchmark.
 
@@ -187,7 +189,9 @@ class AndroidWorldBenchmark:
         for task_id, task_name in sorted(task_ids.items()):
             print(f"{task_id:<4} {task_name:<50}")
 
-    async def run_task(self, task_name: str, task_instance):
+    async def run_task(
+        self, task_name: str, task_instance: TaskEval, reasoning: bool | None = None
+    ):
         """Run a single task.
 
         Args:
@@ -200,12 +204,20 @@ class AndroidWorldBenchmark:
         logger.info(f"Running task: {task_name}")
 
         # Get task description
-        task_description = get_task_description(task_instance)
-        logger.info(f"Task description: {task_description}")
+        logger.info(f"Task goal: {task_instance.goal}")
+        logger.info(f"Task complexity: {task_instance.complexity}")
+
+        max_steps = math.ceil(task_instance.complexity * 10)
+        reasoning = (
+            task_instance.complexity > 3 or reasoning
+            if self.reasoning is None
+            else self.reasoning
+        )
 
         # Create initial result
-        task_result = create_task_result(task_name, task_description)
-        task_result["max_steps"] = self.max_steps_per_task
+        task_result = create_task_result(task_name, task_instance)
+        task_result["max_steps"] = max_steps
+        task_result["reasoning"] = reasoning
 
         # Initialize task
         task_initialized = await initialize_task(self.env, task_instance)
@@ -227,23 +239,18 @@ class AndroidWorldBenchmark:
 
         # Create and run agent
         start_time = time.time()
-        agent = None
-        tools_instance = None
         try:
             # Create agent
             agent, agent_config = create_agent(
                 device_serial=self.device_serial,
-                task_description=task_description,
+                goal=task_instance.goal,
                 llm_provider=self.llm_provider,
                 llm_model=self.llm_model,
                 temperature=self.temperature,
-                max_steps=self.max_steps_per_task,
+                max_steps=max_steps,
+                reasoning=reasoning,
                 debug=True,
-                reasoning=self.reasoning,
             )
-
-            # Store tools instance for screenshots
-            tools_instance = agent.tools_instance
 
             # Run agent
             agent_result = await run_agent(agent, task_name)
@@ -278,6 +285,12 @@ class AndroidWorldBenchmark:
 
         # Check if task was successful
         task_result["success"] = check_task_success(self.env, task_instance)
+
+        if not task_result["success"] and not reasoning and self.reasoning is None:
+            logger.info(
+                f"Task {task_name} failed with reasoning disabled. Retrying with reasoning enabled."
+            )
+            return await self.run_task(task_name, task_instance, reasoning=True)
 
         return task_result
 

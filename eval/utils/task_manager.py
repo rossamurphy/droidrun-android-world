@@ -213,32 +213,6 @@ async def initialize_task(env, task_instance: task_eval.TaskEval) -> bool:
         logger.error(f"Error initializing task {task_name}: {e}")
         return False
 
-def get_task_description(task_instance: task_eval.TaskEval) -> str:
-    """Get the description for a task.
-    
-    Args:
-        task_instance: Task instance
-        
-    Returns:
-        Task description
-    """
-    task_name = task_instance.__class__.__name__
-    
-    try:
-        # First try to use get_instruction() if available
-        if hasattr(task_instance, 'get_instruction') and callable(getattr(task_instance, 'get_instruction')):
-            return task_instance.get_instruction()
-        # Fall back to goal property which is common in AndroidWorld tasks
-        elif hasattr(task_instance, 'goal'):
-            return task_instance.goal
-        else:
-            # If neither is available, use a default message with the task name
-            logger.warning(f"Task {task_name} has no get_instruction() method or goal property")
-            return f"Complete the '{task_name}' task"
-    except Exception as e:
-        logger.error(f"Error getting task description for {task_name}: {e}")
-        return f"Complete the '{task_name}' task"
-
 def check_task_success(env, task_instance: task_eval.TaskEval) -> bool:
     """Check if a task was completed successfully.
     

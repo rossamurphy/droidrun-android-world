@@ -9,6 +9,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 from pathlib import Path
 from droidrun.agent.droid import DroidAgent
+from android_world.task_evals.task_eval import TaskEval
 
 logger = logging.getLogger("android_world_bench")
 
@@ -208,7 +209,7 @@ class ResultManager:
         print(f"\nResults saved to: {self.results_dir}")
 
 
-def create_task_result(task_name: str, task_description: str) -> Dict[str, Any]:
+def create_task_result(task_name: str, task: TaskEval) -> Dict[str, Any]:
     """Create a new task result object.
     
     Args:
@@ -220,7 +221,7 @@ def create_task_result(task_name: str, task_description: str) -> Dict[str, Any]:
     """
     return {
         "task_name": task_name,
-        "task_description": task_description,
+        "task_description": task.goal,
         "success": False,
         "agent_success": False,
         "steps_taken": 0,
@@ -257,11 +258,13 @@ def update_result_from_agent(result: Dict[str, Any], agent_result: Any, agent: D
                 result["steps_taken"] = agent_result["steps"]
             if "success" in agent_result:
                 result["agent_success"] = agent_result["success"]
-            if "logs" in agent_result:
-                result["logs"] = agent_result["logs"]
+            #if "logs" in agent_result:
+            #    result["logs"] = agent_result["logs"]
             # Capture final thought if available
             if "reason" in agent_result:
                 result["final_thought"] = agent_result["reason"]
+
+            # TODO: update steps counting
             
             # Save trajectory information if available
             if "trajectory" in agent_result:

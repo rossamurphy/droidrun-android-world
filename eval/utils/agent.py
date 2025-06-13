@@ -3,7 +3,6 @@ Agent management utilities for AndroidWorld benchmarks.
 """
 
 import logging
-import asyncio
 from typing import Dict, Any, Tuple, Optional
 
 # Import DroidRun modules
@@ -15,7 +14,7 @@ logger = logging.getLogger("android_world_bench")
 
 def create_agent(
     device_serial: str,
-    task_description: str,
+    goal: str,
     llm_provider: str,
     llm_model: str,
     temperature: float = 0.2,
@@ -29,7 +28,7 @@ def create_agent(
 
     Args:
         device_serial: Device serial number
-        task_description: Description of the task
+        goal: Description of the task
         llm_provider: LLM provider name
         llm_model: LLM model name
         temperature: Temperature for LLM
@@ -47,16 +46,17 @@ def create_agent(
     llm = load_llm(provider_name=llm_provider, model=llm_model, temperature=temperature)
 
     # Create agent
-    logger.info(f"Creating DroidAgent for task: {task_description}")
+    logger.info(f"Creating DroidAgent for task: {goal}")
     agent = DroidAgent(
-        goal=task_description,
+        goal=goal,
         llm=llm,
         max_steps=max_steps,
         timeout=timeout,
         max_retries=max_retries,
         device_serial=device_serial,
         reasoning=reasoning,
-        save_trajectories=True,
+        # trajectories are saved by the benchmark runner
+        save_trajectories=False,
         debug=debug,
     )
 
