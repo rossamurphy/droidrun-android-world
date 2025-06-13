@@ -207,12 +207,14 @@ class AndroidWorldBenchmark:
         logger.info(f"Task goal: {task_instance.goal}")
         logger.info(f"Task complexity: {task_instance.complexity}")
 
-        max_steps = math.ceil(task_instance.complexity * 10)
+        max_steps = math.ceil(task_instance.complexity * 15)
         reasoning = (
             task_instance.complexity > 3 or reasoning
             if self.reasoning is None
             else self.reasoning
         )
+        logger.info(f"Max steps: {max_steps}")
+        logger.info(f"Reasoning: {reasoning}")
 
         # Create initial result
         task_result = create_task_result(task_name, task_instance)
