@@ -260,7 +260,8 @@ class AndroidWorldBenchmark:
             task_dir = os.path.join(
                 self.results_dir, f"task_{task_name.replace(' ', '_')}"
             )
-            agent.trajectory.save_trajectory(os.path.join(task_dir))
+            logger.info(f"Saving trajectory to {task_dir}")
+            agent.trajectory.save_trajectory(task_dir)
 
             # Update result with agent information
             task_result = update_result_from_agent(task_result, agent_result, agent)
