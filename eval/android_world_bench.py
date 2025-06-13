@@ -190,7 +190,11 @@ class AndroidWorldBenchmark:
             print(f"{task_id:<4} {task_name:<50}")
 
     async def run_task(
-        self, task_name: str, task_instance: TaskEval, reasoning: bool | None = None
+        self,
+        task_id: int,
+        task_name: str,
+        task_instance: TaskEval,
+        reasoning: bool | None = None,
     ):
         """Run a single task.
 
@@ -217,7 +221,7 @@ class AndroidWorldBenchmark:
         logger.info(f"Reasoning: {reasoning}")
 
         # Create initial result
-        task_result = create_task_result(task_name, task_instance)
+        task_result = create_task_result(task_id, task_name, task_instance)
         task_result["max_steps"] = max_steps
         task_result["reasoning"] = reasoning
 
@@ -293,7 +297,7 @@ class AndroidWorldBenchmark:
             logger.info(
                 f"Task {task_name} failed with reasoning disabled. Retrying with reasoning enabled."
             )
-            return await self.run_task(task_name, task_instance, reasoning=True)
+            return await self.run_task(task_id, task_name, task_instance, reasoning=True)
 
         return task_result
 
@@ -328,7 +332,7 @@ class AndroidWorldBenchmark:
 
         try:
             # Run each task
-            for i, (task_name, task_instance) in enumerate(task_suite):
+            for i, (task_id, task_name, task_instance) in enumerate(task_suite):
                 try:
                     # Create a task-specific directory in results_dir
                     task_dir = os.path.join(
@@ -337,7 +341,7 @@ class AndroidWorldBenchmark:
                     os.makedirs(task_dir, exist_ok=True)
 
                     # Run the task
-                    task_result = await self.run_task(task_name, task_instance)
+                    task_result = await self.run_task(task_id, task_name, task_instance)
 
                     # Save the result JSON
                     json_path = os.path.join(task_dir, "result.json")

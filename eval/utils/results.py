@@ -94,6 +94,7 @@ class ResultManager:
         
         # Add simplified task result
         summary_task = {
+            "task_id": result["task_id"],
             "task_name": result["task_name"],
             "success": result.get("success", False),
             "steps_taken": result.get("steps_taken", 0),
@@ -209,7 +210,7 @@ class ResultManager:
         print(f"\nResults saved to: {self.results_dir}")
 
 
-def create_task_result(task_name: str, task: TaskEval) -> Dict[str, Any]:
+def create_task_result(task_id: int, task_name: str, task: TaskEval) -> Dict[str, Any]:
     """Create a new task result object.
     
     Args:
@@ -220,6 +221,7 @@ def create_task_result(task_name: str, task: TaskEval) -> Dict[str, Any]:
         Task result object
     """
     return {
+        "task_id": task_id,
         "task_name": task_name,
         "task_description": task.goal,
         "success": False,
