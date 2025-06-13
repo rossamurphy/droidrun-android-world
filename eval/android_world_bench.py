@@ -284,9 +284,9 @@ class AndroidWorldBenchmark:
         task_result["execution_time"] = end_time - start_time
 
         # Check if task was successful
-        task_result["success"] = task_instance.is_successful(self.env) == 1.0
+        task_result["success"] = task_instance.is_successful(self.env)
 
-        if not task_result["success"] and not reasoning and self.reasoning is None:
+        if not task_result["success"] <= 0.9 and not reasoning and self.reasoning is None:
             logger.info(
                 f"Task {task_name} failed with reasoning disabled. Retrying with reasoning enabled."
             )
