@@ -8,6 +8,7 @@ from typing import Dict, Any, Tuple, Optional
 # Import DroidRun modules
 from droidrun.agent.droid import DroidAgent
 from droidrun.agent.utils.llm_picker import load_llm
+from llama_index.core.workflow import WorkflowTimeoutError
 
 logger = logging.getLogger("android_world_bench")
 
@@ -91,6 +92,13 @@ async def run_agent(agent: DroidAgent, task_name: str) -> Dict[str, Any]:
         result = await agent.run()
         logger.info(f"Agent completed task: {task_name}")
         return result
+    except WorkflowTimeoutError as e:
+        logger.error(f"Agent timed out for task {task_name}: {e}")
+        return {
+            "steps": agent.step_counter,
+            "success": False,
+            "reason": "Timeout after 600 seconds (10 minutes)",
+        }
     except Exception as e:
         logger.error(f"Error running agent for task {task_name}: {e}")
         return None
