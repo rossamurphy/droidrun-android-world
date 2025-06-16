@@ -1,373 +1,133 @@
-#!/usr/bin/env python3
-"""
-Android World Benchmark Runner for DroidRun
-
-This script provides integration with the AndroidWorld benchmark suite,
-allowing evaluation of DroidRun against standard tasks.
-"""
-
-import os
-import sys
 import argparse
-import logging
 import asyncio
+import logging
 import time
-import json
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
-import math
+import textwrap
 
-# Configure logging
+from eval.tools import AndroidWorldTools
+from eval.android_env_client import AndroidEnvClient
+from droidrun import DroidAgent, load_llm
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("android_world_bench")
-
-# Import utility modules
-from eval.utils.environment import (
-    initialize_environment,
-    get_device_serial,
-)
-
-from eval.utils.accessibility import enable_accessibility_service
-from eval.utils.task_manager import TaskRegistry
-from eval.utils.results import (
-    ResultManager,
-    create_task_result,
-    update_result_from_agent,
-    ProgressTracker,
-)
-from eval.utils.agent import create_agent, run_agent
-from eval.utils.keepalive import OverlayKeepalive, disable_overlay_once
-from android_world import registry
-from android_world.task_evals.task_eval import TaskEval
-
-
-# Now import AndroidWorld modules
-try:
-    from android_world import registry
-except ImportError as e:
-    logger.error(f"Failed to import AndroidWorld modules: {e}")
-    logger.error("Please make sure AndroidWorld is correctly installed")
-    sys.exit(1)
+logger.level = logging.DEBUG
+logging.getLogger("droidrun").level = logging.DEBUG
 
 
 class AndroidWorldBenchmark:
-    """Benchmark DroidRun using AndroidWorld tasks."""
-
     def __init__(
         self,
-        task_ids: Optional[List[int]] = None,
-        task_names: Optional[List[str]] = None,
-        llm_provider: str = "OpenAI",
-        llm_model: str = "gpt-4o-mini",
-        temperature: float = 0.2,
-        adb_path: str = "adb",
-        console_port: int = 5554,
-        perform_emulator_setup: bool = False,
-        random_seed: int = 42,
-        results_dir: str = "eval_results",
-        max_steps_per_task: int = 50,
-        task_family: str = registry.TaskRegistry.ANDROID_WORLD_FAMILY,
-        n_task_combinations: int = 1,
-        portal_service_name: str = "com.droidrun.portal/com.droidrun.portal.DroidrunPortalService",
-        progress_file: str = "task_progress.json",
-        use_keepalive: bool = True,
-        keepalive_interval: int = 5,
-        reasoning: bool | None = None,
-    ):
-        """Initialize the benchmark.
+        base_url: str = "http://localhost:5000",
+    ) -> None:
+        logger.info(f"Initializing AndroidWorldBenchmark with env base_url: {base_url}")
+        self.env = AndroidEnvClient(base_url)
+        self.tools = AndroidWorldTools(self.env)
 
-        Args:
-            task_ids: List of task IDs to run (1-116)
-            task_names: List of specific task names to run
-            llm_provider: LLM provider to use (OpenAI, Anthropic, Gemini, etc.)
-            llm_model: Model name to use
-            temperature: Temperature for LLM sampling
-            adb_path: Path to ADB executable
-            console_port: Emulator console port
-            perform_emulator_setup: Whether to perform initial emulator setup
-            random_seed: Random seed for reproducibility
-            results_dir: Directory to save results
-            max_steps_per_task: Maximum steps to allow per task
-            task_family: Task family to benchmark
-            n_task_combinations: Number of parameter combinations per task
-            portal_service_name: Name of the DroidRun accessibility service
-            progress_file: Path to progress tracking file
-            use_keepalive: Whether to use the keepalive service
-            keepalive_interval: Interval in seconds for the keepalive service
-        """
-        self.task_ids = task_ids
-        self.task_names = task_names
-        self.llm_provider = llm_provider
-        self.llm_model = llm_model
-        self.temperature = temperature
-        self.reasoning = reasoning
-        self.adb_path = adb_path
-        self.console_port = console_port
-        self.perform_emulator_setup = perform_emulator_setup
-        self.random_seed = random_seed
-        self.results_dir = results_dir
-        self.max_steps_per_task = max_steps_per_task
-        self.task_family = task_family
-        self.n_task_combinations = n_task_combinations
-        self.portal_service_name = portal_service_name
-        self.progress_file = progress_file
-        self.use_keepalive = use_keepalive
-        self.keepalive_interval = keepalive_interval
-
-        # Components initialized during setup
-        self.env = None
-        self.device_serial = None
-        self.task_registry = None
-        self.result_manager = None
-        self.progress_tracker = None
-        self.keepalive_service = None
-
-    async def initialize(self):
-        """Initialize all components needed for the benchmark."""
-        # Initialize environment
-        self.env = initialize_environment(
-            adb_path=self.adb_path,
-            console_port=self.console_port,
-            perform_setup=self.perform_emulator_setup,
-        )
-        if not self.env:
-            logger.error("Failed to initialize environment. Exiting.")
-            sys.exit(1)
-
-        # Get device serial
-        self.device_serial = await get_device_serial()
-        if not self.device_serial:
-            logger.error("Failed to get device serial. Exiting.")
-            sys.exit(1)
-
-        # Enable accessibility service
-        accessibility_enabled = await enable_accessibility_service(
-            adb_path=self.adb_path,
-            device_serial=self.device_serial,
-            service_name=self.portal_service_name,
-            disable_first=True,
-        )
-        if not accessibility_enabled:
-            logger.error("Failed to enable accessibility service. Exiting.")
-            sys.exit(1)
-
-        # Initialize task registry
-        self.task_registry = TaskRegistry(task_family=self.task_family)
-
-        # Initialize result manager
-        self.result_manager = ResultManager(results_dir=self.results_dir)
-
-        # Initialize progress tracker
-        self.progress_tracker = ProgressTracker(progress_file=self.progress_file)
-
-        # Initialize keepalive service
-        self.keepalive_service = OverlayKeepalive(
-            device_serial=self.device_serial, interval=self.keepalive_interval
-        )
-
-        logger.info("Benchmark initialization complete")
+    def wait_for_env(self):
+        while True:
+            if not self.env.health():
+                print("Environment is not healthy, waiting for 1 second...")
+                time.sleep(1)
+            else:
+                break
 
     def list_tasks(self):
-        """Print the list of available tasks."""
-        if not self.task_registry:
-            self.task_registry = TaskRegistry(task_family=self.task_family)
+        logger.info("Listing tasks...")
+        tasks = self.env.get_suite_task_list(-1)
+        for i, task in enumerate(tasks):
+            logger.info(f"{i}: {task}")
 
-        task_ids = self.task_registry.get_task_ids()
-
-        print("\nAvailable AndroidWorld Tasks:")
-        print("-----------------------------")
-        print(f"{'ID':<4} {'Task Name':<50}")
-        print("-" * 55)
-
-        for task_id, task_name in sorted(task_ids.items()):
-            print(f"{task_id:<4} {task_name:<50}")
-
-    async def run_task(
+    async def run(
         self,
-        task_id: int,
-        task_name: str,
-        task_instance: TaskEval,
-        reasoning: bool | None = None,
+        # droidrun params
+        llm_provider: str,
+        llm_model: str,
+        reasoning: bool = True,
+        temperature: float = 0.5,
+        tracing: bool = False,
+        debug: bool = False,
+        # suite params
+        n_task_combinations: int = 1,
+        seed: int = 42,
+        task_family: str = "android_world",
+        max_steps_multiplier: int = 15,
     ):
-        """Run a single task.
-
-        Args:
-            task_name: Name of the task
-            task_instance: Task instance to run
-
-        Returns:
-            Task result
-        """
-        logger.info(f"Running task: {task_name}")
-
-        # Get task description
-        logger.info(f"Task goal: {task_instance.goal}")
-        logger.info(f"Task complexity: {task_instance.complexity}")
-
-        max_steps = math.ceil(task_instance.complexity * 15)
-        reasoning = (
-            task_instance.complexity > 3 or reasoning
-            if self.reasoning is None
-            else self.reasoning
-        )
-        logger.info(f"Max steps: {max_steps}")
-        logger.info(f"Reasoning: {reasoning}")
-
-        # Create initial result
-        task_result = create_task_result(task_id, task_name, task_instance)
-        task_result["max_steps"] = max_steps
-        task_result["reasoning"] = reasoning
-
-        # Initialize task
         self.env.reset(go_home=True)
-        task_instance.initialize_task(self.env)
-
-        # Enable accessibility service for the task
-        await enable_accessibility_service(
-            adb_path=self.adb_path,
-            device_serial=self.device_serial,
-            service_name=self.portal_service_name,
-            disable_first=True,
+        logger.info(
+            f"Reinitializing suite {task_family} with {n_task_combinations} combinations and seed {seed}"
         )
-
-        # Start keepalive service if enabled
-        if self.use_keepalive and self.keepalive_service:
-            self.keepalive_service.start()
-
-        # Create and run agent
-        start_time = time.time()
-        try:
-            # Create agent
-            agent, agent_config = create_agent(
-                device_serial=self.device_serial,
-                goal=task_instance.goal,
-                llm_provider=self.llm_provider,
-                llm_model=self.llm_model,
-                temperature=self.temperature,
-                max_steps=max_steps,
-                reasoning=reasoning,
-                debug=True,
-            )
-
-            # Run agent
-            agent_result = await run_agent(agent, task_name)
-
-            task_dir = os.path.join(
-                self.results_dir, f"task_{task_name.replace(' ', '_')}"
-            )
-            logger.info(f"Saving trajectory to {task_dir}")
-            agent.trajectory.save_trajectory(task_dir)
-
-            # Update result with agent information
-            task_result = update_result_from_agent(task_result, agent_result, agent)
-
-            # Add screenshots to result if available
-            # if hasattr(tools_instance, "screenshots") and tools_instance.screenshots:
-            #    task_result["screenshots"] = tools_instance.screenshots
-
-        except Exception as e:
-            logger.error(f"Error during agent execution: {e}")
-            task_result["error"] = str(e)
-        finally:
-            # Stop keepalive service if it was started
-            if (
-                self.use_keepalive
-                and self.keepalive_service
-                and self.keepalive_service.running
-            ):
-                self.keepalive_service.stop()
-
-        # Set execution time
-        end_time = time.time()
-        task_result["execution_time"] = end_time - start_time
-
-        # Check if task was successful
-        task_result["success"] = task_instance.is_successful(self.env)
-
-        if not task_result["success"] <= 0.9 and not reasoning and self.reasoning is None:
-            logger.info(
-                f"Task {task_name} failed with reasoning disabled. Retrying with reasoning enabled."
-            )
-            return await self.run_task(
-                task_id, task_name, task_instance, reasoning=True
-            )
-
-        return task_result
-
-    async def run_benchmark(self):
-        """Run the benchmark on the selected tasks."""
-        # Initialize components
-        await self.initialize()
-
-        # Create task suite
-        task_suite = self.task_registry.create_task_suite(
-            task_ids=self.task_ids,
-            task_names=self.task_names,
-            n_combinations=self.n_task_combinations,
-            random_seed=self.random_seed,
+        self.env.reinitialize_suite(
+            n_task_combinations=n_task_combinations, seed=seed, task_family=task_family
         )
+        logger.debug("Suite reinitialized successfully")
 
-        if not task_suite:
-            logger.error("No tasks to run")
-            return
+        logger.debug("Fetching task list...")
+        task_list = self.env.get_suite_task_list(-1)
+        logger.info(f"Found {len(task_list)} tasks")
+        logger.debug("Loading LLM...")
+        llm = load_llm(llm_provider, model=llm_model)
+        logger.debug("LLM loaded successfully")
 
-        # Get the number of completed tasks to skip
-        skip_count = self.progress_tracker.get_completed_tasks()
-        if skip_count > 0:
-            logger.info(f"Skipping {skip_count} completed tasks")
-            if skip_count >= len(task_suite):
-                logger.info("All tasks already completed")
-                return
-            task_suite = task_suite[skip_count:]
+        for task_name in task_list:
+            num_tasks = self.env.get_suite_task_length(task_name)
 
-        logger.info(f"Running benchmark with {len(task_suite)} tasks")
-        completed_count = skip_count
+            for task_idx in range(num_tasks):
+                task_goal = self.env.get_task_goal(task_name, task_idx)
+                task_complexity = self.env.get_task_complexity(task_name, task_idx)
 
-        try:
-            # Run each task
-            for i, (task_id, task_name, task_instance) in enumerate(task_suite):
+                max_steps = task_complexity * max_steps_multiplier
+                max_retries = max_steps / 10
+                timeout = task_complexity * 300
+
+                logger.info(
+                    f"Initializing Task {task_name} {task_idx} | {task_complexity} -> {max_steps} | {task_goal} within {timeout} seconds"
+                )
+
                 try:
-                    # Create a task-specific directory in results_dir
-                    task_dir = os.path.join(
-                        self.results_dir, f"task_{task_name.replace(' ', '_')}"
-                    )
-                    os.makedirs(task_dir, exist_ok=True)
-
-                    # Run the task
-                    task_result = await self.run_task(task_id, task_name, task_instance)
-
-                    # Save the result JSON
-                    json_path = os.path.join(task_dir, "result.json")
-                    with open(json_path, "w") as f:
-                        json.dump(task_result, f, indent=2)
-
-                    # Save the result in the result manager as well
-                    self.result_manager.save_task_result(task_result)
-
-                    # Update progress if task was successful
-                    if task_result["success"]:
-                        completed_count += 1
-                        self.progress_tracker.update_progress(completed_count)
-
+                    self.env.initialize_task(task_name, task_idx)
+                    logger.debug("Task initialized successfully")
                 except Exception as e:
-                    logger.error(f"Error running task {task_name}: {e}")
-                finally:
-                    # Tear down the task
-                    task_instance.tear_down(self.env)
+                    logger.error(f"Error initializing task {task_name} {task_idx}: {e}")
+                    logger.info("Continuing to next task...")
+                    continue
 
-            # Print summary
-            self.result_manager.print_summary()
-        finally:
-            # Make sure keepalive service is stopped
-            if self.keepalive_service and self.keepalive_service.running:
-                self.keepalive_service.stop()
+                logger.info(
+                    f"Initializing DroidAgent with {max_steps} steps, {max_retries} retries, and {timeout} timeout"
+                )
 
-            # Close environment
-            if self.env:
-                logger.info("Closing environment")
-                self.env.close()
+                agent = DroidAgent(
+                    task_goal,
+                    llm,
+                    self.tools,
+                    reasoning=reasoning,
+                    enable_tracing=tracing,
+                    debug=debug,
+                    max_steps=max_steps,
+                    max_retries=max_retries,
+                    timeout=timeout,
+                )
+
+                logger.debug("DroidAgent initialized successfully")
+
+                try:
+                    logger.info("Running DroidAgent...")
+                    res = await agent.run()
+                    logger.debug("DroidAgent completed successfully")
+                except Exception as e:
+                    logger.error(f"Error completing task {task_name} {task_idx}: {e}")
+                    logger.info("Continuing to next task...")
+                    continue
+
+                try:
+                    self.env.tear_down_task(task_name, task_idx)
+                except Exception as e:
+                    logger.error(f"Error tearing down task {task_name} {task_idx}: {e}")
+                    logger.info("Continuing to next task...")
+                    continue
+
+                self.env.reset(go_home=True)
 
 
 def main():
@@ -376,14 +136,23 @@ def main():
         description="Run AndroidWorld benchmark tasks with DroidRun"
     )
 
+    # Benchmark environment configuration
+    env_group = parser.add_argument_group("Benchmark Environment Configuration")
+    env_group.add_argument(
+        "--base-url",
+        type=str,
+        default="http://localhost:5000",
+        help="Base URL for the Android environment",
+    )
+
     # Task selection arguments
     task_group = parser.add_argument_group("Task Selection")
-    task_group.add_argument(
-        "--task-ids", type=int, nargs="+", help="Task IDs to run (1-116)"
-    )
-    task_group.add_argument(
-        "--task-names", type=str, nargs="+", help="Task names to run"
-    )
+    # task_group.add_argument(
+    #    "--task-ids", type=int, nargs="+", help="Task IDs to run (1-116)"
+    # )
+    # task_group.add_argument(
+    #    "--task-names", type=str, nargs="+", help="Task names to run"
+    # )
     task_group.add_argument(
         "--list-tasks", action="store_true", help="List available tasks and exit"
     )
@@ -395,112 +164,105 @@ def main():
     )
 
     # LLM configuration
-    llm_group = parser.add_argument_group("LLM Configuration")
-    llm_group.add_argument(
+    droidrun_group = parser.add_argument_group("Droidrun Configuration")
+    droidrun_group.add_argument(
         "--llm-provider",
         type=str,
-        default="OpenAI",
+        default="Gemini",
         help="LLM provider (OpenAI, Anthropic, Gemini, etc.)",
     )
-    llm_group.add_argument(
-        "--llm-model", type=str, default="gpt-4o-mini", help="Model name to use"
+    droidrun_group.add_argument(
+        "--llm-model",
+        type=str,
+        default="models/gemini-2.5-pro-preview-06-05",
+        help="Model name to use",
     )
-    llm_group.add_argument(
+    droidrun_group.add_argument(
         "--temperature", type=float, default=0.2, help="Temperature for LLM sampling"
     )
-    llm_group.add_argument(
-        "--reasoning", type=bool, default=False, help="Enable reasoning for LLM"
+    droidrun_group.add_argument(
+        "--reasoning", action="store_true", help="Enable reasoning for LLM"
     )
-
-    # Environment configuration
-    env_group = parser.add_argument_group("Environment Configuration")
-    env_group.add_argument(
-        "--adb-path", type=str, default="adb", help="Path to ADB executable"
-    )
-    env_group.add_argument(
-        "--console-port", type=int, default=5554, help="Emulator console port"
-    )
-    env_group.add_argument(
-        "--perform-emulator-setup",
+    droidrun_group.add_argument(
+        "--tracing",
         action="store_true",
-        help="Perform initial emulator setup (install apps, set permissions)",
+        help="Enable tracing for Droidrun",
     )
-    env_group.add_argument(
-        "--portal-service",
-        type=str,
-        default="com.droidrun.portal/com.droidrun.portal.DroidrunPortalService",
-        help="Name of the DroidRun accessibility service",
-    )
-    env_group.add_argument(
-        "--no-keepalive",
+    droidrun_group.add_argument(
+        "--debug",
         action="store_true",
-        help="Disable the keepalive service for overlay toggling",
-    )
-    env_group.add_argument(
-        "--keepalive-interval",
-        type=int,
-        default=5,
-        help="Interval in seconds for the keepalive service",
+        help="Enable debug mode for Droidrun",
     )
 
     # Benchmark configuration
-    bench_group = parser.add_argument_group("Benchmark Configuration")
-    bench_group.add_argument(
-        "--random-seed", type=int, default=42, help="Random seed for reproducibility"
+    suite_group = parser.add_argument_group("Benchmark Suite Configuration")
+    suite_group.add_argument(
+        "--seed", type=int, default=42, help="Random seed for reproducibility"
     )
-    bench_group.add_argument(
+    suite_group.add_argument(
+        "--task-family",
+        type=str,
+        default="android_world",
+        help="Task family to run",
+    )
+    suite_group.add_argument(
+        "--max-step-multiplier",
+        type=int,
+        default=15,
+        help="Used to calculate max steps",
+    )
+
+    """suite_group.add_argument(
         "--results-dir",
         type=str,
         default="eval_results",
         help="Directory to save results",
-    )
-    bench_group.add_argument(
-        "--max-steps", type=int, default=50, help="Maximum steps per task"
-    )
-    bench_group.add_argument(
-        "--task-family",
-        type=str,
-        default=registry.TaskRegistry.ANDROID_WORLD_FAMILY,
-        help="Task family to benchmark",
-    )
-    bench_group.add_argument(
-        "--progress-file",
-        type=str,
-        default="task_progress.json",
-        help="File to track task progress",
-    )
+    )"""
 
     args = parser.parse_args()
 
     # Create benchmark instance
     benchmark = AndroidWorldBenchmark(
-        task_ids=args.task_ids,
-        task_names=args.task_names,
-        llm_provider=args.llm_provider,
-        llm_model=args.llm_model,
-        temperature=args.temperature,
-        adb_path=args.adb_path,
-        console_port=args.console_port,
-        perform_emulator_setup=args.perform_emulator_setup,
-        random_seed=args.random_seed,
-        results_dir=args.results_dir,
-        max_steps_per_task=args.max_steps,
-        task_family=args.task_family,
-        n_task_combinations=args.n_task_combinations,
-        portal_service_name=args.portal_service,
-        progress_file=args.progress_file,
-        use_keepalive=not args.no_keepalive,
-        keepalive_interval=args.keepalive_interval,
-        reasoning=args.reasoning,
+        base_url=args.base_url,
     )
+    benchmark.wait_for_env()
 
     # Just list tasks if requested
     if args.list_tasks:
         benchmark.list_tasks()
         return
 
+    logger.info(
+        textwrap.dedent(
+            """
+
+  ██████╗ ██████╗  ██████╗ ██╗██████╗ ██████╗ ██╗   ██╗███╗   ██╗
+  ██╔══██╗██╔══██╗██╔═══██╗██║██╔══██╗██╔══██╗██║   ██║████╗  ██║
+  ██║  ██║██████╔╝██║   ██║██║██║  ██║██████╔╝██║   ██║██╔██╗ ██║
+  ██║  ██║██╔══██╗██║   ██║██║██║  ██║██╔══██╗██║   ██║██║╚██╗██║
+  ██████╔╝██║  ██║╚██████╔╝██║██████╔╝██║  ██║╚██████╔╝██║ ╚████║
+  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ Android World Benchmark
+"""
+        )
+    )
+
     # Run the benchmark
-    asyncio.run(benchmark.run_benchmark())
+    asyncio.run(
+        benchmark.run(
+            # droidrun params
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model,
+            reasoning=args.reasoning,
+            temperature=args.temperature,
+            tracing=args.tracing,
+            debug=args.debug,
+            # suite params
+            n_task_combinations=args.n_task_combinations,
+            seed=args.seed,
+            task_family=args.task_family,
+            max_steps_multiplier=args.max_step_multiplier,
+        )
+    )
 
 
 if __name__ == "__main__":
