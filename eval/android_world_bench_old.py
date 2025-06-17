@@ -29,7 +29,7 @@ from eval.utils.environment import (
     get_device_serial,
 )
 
-from eval.utils.accessibility import enable_accessibility_service
+from eval.portal.accessibility import enable_accessibility_service
 from eval.utils.task_manager import TaskRegistry
 from eval.utils.results import (
     ResultManager,

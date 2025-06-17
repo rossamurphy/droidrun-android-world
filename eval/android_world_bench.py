@@ -3,9 +3,14 @@ import asyncio
 import logging
 import time
 import textwrap
+import os
 
 from eval.tools import AndroidWorldTools
 from eval.android_env_client import AndroidEnvClient
+from eval.tracker import write_task_result, write_task_trajectory, track_task
+from eval.portal.accessibility import enable_accessibility_service
+from eval.portal.keepalive import OverlayKeepalive
+
 from droidrun import DroidAgent, load_llm
 
 logging.basicConfig(
@@ -14,30 +19,43 @@ logging.basicConfig(
 logger = logging.getLogger("android_world_bench")
 logger.level = logging.DEBUG
 logging.getLogger("droidrun").level = logging.DEBUG
+logging.getLogger("android_world_tools").level = logging.DEBUG
 
 
 class AndroidWorldBenchmark:
     def __init__(
         self,
+        device: str = "emulator-5554",
         base_url: str = "http://localhost:5000",
     ) -> None:
-        logger.info(f"Initializing AndroidWorldBenchmark with env base_url: {base_url}")
+        logger.info(
+            f"Initializing AndroidWorldBenchmark with env device: {device} base_url: {base_url}"
+        )
+        self.device = device
+        self.base_url = base_url
         self.env = AndroidEnvClient(base_url)
-        self.tools = AndroidWorldTools(self.env)
+        self.tools = AndroidWorldTools(device, self.env)
 
     def wait_for_env(self):
+        logger.debug("Waiting for environment to be healthy...")
         while True:
             if not self.env.health():
                 print("Environment is not healthy, waiting for 1 second...")
                 time.sleep(1)
             else:
                 break
+        logger.debug("Environment is healthy")
 
     def list_tasks(self):
         logger.info("Listing tasks...")
         tasks = self.env.get_suite_task_list(-1)
         for i, task in enumerate(tasks):
             logger.info(f"{i}: {task}")
+
+    async def install_portal(self, portal_apk: str):
+        logger.info(f"Installing {portal_apk}...")
+        await self.tools.install_app(portal_apk, reinstall=True)
+        logger.info("Portal installed successfully")
 
     async def run(
         self,
@@ -70,10 +88,15 @@ class AndroidWorldBenchmark:
         llm = load_llm(llm_provider, model=llm_model)
         logger.debug("LLM loaded successfully")
 
+        logger.debug("Initializing droidrun portal keepalive...")
+        keepalive = OverlayKeepalive(device_serial=self.device)
+        logger.debug("Droidrun portal keepalive initialized")
+
         for task_name in task_list:
             num_tasks = self.env.get_suite_task_length(task_name)
 
             for task_idx in range(num_tasks):
+                self.env.reset(go_home=True)
                 task_goal = self.env.get_task_goal(task_name, task_idx)
                 task_complexity = self.env.get_task_complexity(task_name, task_idx)
 
@@ -93,6 +116,21 @@ class AndroidWorldBenchmark:
                     logger.info("Continuing to next task...")
                     continue
 
+                try:
+                    logger.debug("Enabling accessibility service...")
+                    await enable_accessibility_service(
+                        device_serial=self.device,
+                        disable_first=True,
+                    )
+                    logger.debug("Accessibility service enabled")
+                    logger.debug("Starting droidrun portal keepalive...")
+                    keepalive.start()
+                    logger.debug("Droidrun portal keepalive started")
+                except Exception as e:
+                    logger.error(f"Error enabling accessibility service: {e}")
+                    logger.info("Continuing to next task...")
+                    continue
+
                 logger.info(
                     f"Initializing DroidAgent with {max_steps} steps, {max_retries} retries, and {timeout} timeout"
                 )
@@ -107,27 +145,45 @@ class AndroidWorldBenchmark:
                     max_steps=max_steps,
                     max_retries=max_retries,
                     timeout=timeout,
+                    save_trajectories=False,
                 )
 
                 logger.debug("DroidAgent initialized successfully")
 
-                try:
-                    logger.info("Running DroidAgent...")
-                    res = await agent.run()
-                    logger.debug("DroidAgent completed successfully")
-                except Exception as e:
-                    logger.error(f"Error completing task {task_name} {task_idx}: {e}")
-                    logger.info("Continuing to next task...")
-                    continue
+                task_result = track_task(task_name, task_idx, task_goal, max_steps)
 
                 try:
+
+                    logger.info("Running DroidAgent...")
+                    agent_result = await agent.run()
+                    logger.debug("DroidAgent completed successfully")
+
+                    score = self.env.get_task_score(task_name, task_idx)
+                    logger.info(f"Task {task_name} {task_idx} score: {score}")
+
+                    write_task_result(
+                        task_result, agent, score=score, agent_result=agent_result
+                    )
+                except Exception as e:
+                    logger.error(f"Error completing task {task_name} {task_idx}: {e}")
+                    write_task_result(task_result, agent, error=repr(e))
+                finally:
+                    try:
+                        write_task_trajectory(task_name, task_idx, agent)
+                    except Exception as e:
+                        logger.warn(
+                            f"Could not write task trajectory for {task_name} {task_idx}: {e}"
+                        )
+
+                try:
+                    logger.debug(f"Tearing down task {task_name} {task_idx}")
                     self.env.tear_down_task(task_name, task_idx)
+                    keepalive.stop()
                 except Exception as e:
                     logger.error(f"Error tearing down task {task_name} {task_idx}: {e}")
                     logger.info("Continuing to next task...")
+                    keepalive.stop()
                     continue
-
-                self.env.reset(go_home=True)
 
 
 def main():
@@ -143,6 +199,18 @@ def main():
         type=str,
         default="http://localhost:5000",
         help="Base URL for the Android environment",
+    )
+    env_group.add_argument(
+        "--device",
+        type=str,
+        default="emulator-5554",
+        help="Device serial to use for adb tools",
+    )
+    env_group.add_argument(
+        "--portal-path",
+        type=str,
+        default=os.path.join(os.path.dirname(__file__), "../droidrun-portal.apk"),
+        help="Path to the droidrun portal APK file",
     )
 
     # Task selection arguments
@@ -224,8 +292,10 @@ def main():
     # Create benchmark instance
     benchmark = AndroidWorldBenchmark(
         base_url=args.base_url,
+        device=args.device,
     )
     benchmark.wait_for_env()
+    asyncio.run(benchmark.install_portal(args.portal_path))
 
     # Just list tasks if requested
     if args.list_tasks:

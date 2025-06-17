@@ -6,3 +6,5 @@ trajectories
 *.apk
 build
 task_progress.json
+debug_screenshots
+.DS_Store
