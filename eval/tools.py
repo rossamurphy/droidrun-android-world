@@ -6,12 +6,14 @@ from android_world.env import json_action, representation_utils
 import logging
 from PIL import Image
 import io
+from eval.keymap import get_keycode_name
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("android_world_tools")
 
 
 class AndroidWorldTools(Tools):
     def __init__(self, client: Optional[AndroidEnvClient] = None) -> None:
+        logger.debug("Initializing AndroidWorldTools")
         self.client = client or AndroidEnvClient()
         self.memory: List[str] = []
         self.success: Optional[bool] = None
@@ -65,6 +67,7 @@ class AndroidWorldTools(Tools):
                 return False
             x, y = el.bbox_pixels.center
             action = json_action.JSONAction(action_type="click", x=int(x), y=int(y))
+            logger.debug(f"Executing action: {action.json_str()}")
             await asyncio.to_thread(self.client.execute_action, action)
             return True
         except Exception as e:
@@ -76,6 +79,7 @@ class AndroidWorldTools(Tools):
         Tap on the device screen at specific coordinates using AndroidEnvClient.
         """
         action = json_action.JSONAction(action_type="click", x=x, y=y)
+        logger.debug(f"Executing action: {action.json_str()}")
         try:
             await asyncio.to_thread(self.client.execute_action, action)
             return True
@@ -88,6 +92,7 @@ class AndroidWorldTools(Tools):
         """
         Perform a swipe gesture using AndroidEnvClient.
         """
+        logger.debug(f"Swipe from {start_x},{start_y} to {end_x},{end_y}")
 
         def get_swipe_direction(start_x, start_y, end_x, end_y):
             dx = end_x - start_x
@@ -100,17 +105,18 @@ class AndroidWorldTools(Tools):
                     return "left"
             else:
                 # Vertical swipe
-                if dy < 0:
+                if dy > 0:
                     return "down"
                 else:
                     return "up"
 
         action = json_action.JSONAction(
-            action_type="scroll",
+            action_type="swipe",
             direction=get_swipe_direction(start_x, start_y, end_x, end_y),
             # The backend expects x/y for start, end_x/end_y for end, but JSONAction only supports x/y.
             # If the backend expects direction, this may need to be adapted.
         )
+        logger.debug(f"Executing action: {action.json_str()}")
         # The current JSONAction class does not support end_x/end_y directly, so this may need backend support.
         # For now, we only send start_x/start_y.
         try:
@@ -145,25 +151,21 @@ class AndroidWorldTools(Tools):
         """
         Press a key by keycode using AndroidEnvClient.
         """
+        action = json_action.JSONAction(
+            action_type="press_keyboard", keycode=get_keycode_name(keycode)
+        )
 
-        if keycode == 3:
-            return await self.back()
-        #elif keycode != 66:
-        #    raise ValueError(f"Unsupported keycode: {keycode}. Valid keycodes are 3 (back) and 66 (enter).")
-        elif keycode == 66:
-            action = json_action.JSONAction(action_type="press_keyboard", keycode=keycode)
-    
-        else:
-            action = json_action.JSONAction(action_type="press_keyboard", keycode=keycode)
+        logger.debug(f"Executing action: {action.json_str()}")
 
         await asyncio.to_thread(self.client.execute_action, action)
         return True
-    
+
     async def start_app(self, package: str, activity: str = "") -> bool:
         """
         Start an app by package name using AndroidEnvClient.
         """
         action = json_action.JSONAction(action_type="open_app", app_name=package)
+        logger.debug(f"Executing action: {action.json_str()}")
         try:
             await asyncio.to_thread(self.client.execute_action, action)
             return True
@@ -224,6 +226,10 @@ class AndroidWorldTools(Tools):
             self.success = True
             self.reason = reason or "Task completed successfully."
             self.finished = True
+
+            self.client.execute_action(
+                json_action.JSONAction(action_type="answer", text=reason)
+            )
         else:
             self.success = False
             if not reason:
