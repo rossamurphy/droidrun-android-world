@@ -17,7 +17,7 @@ from eval.portal.accessibility import enable_accessibility_service
 from eval.portal.keepalive import OverlayKeepalive
 
 from llama_index.core.workflow import WorkflowTimeoutError
-from droidrun import DroidAgent, load_llm
+from droidrun import DroidAgent, load_llm, DeviceManager
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -54,7 +54,7 @@ class AndroidWorldBenchmark:
 
     def list_tasks(self):
         logger.info("Listing tasks...")
-        tasks = self.env.get_suite_task_list(-1)
+        tasks = self.env.get_suite_task_list()
         for i, task in enumerate(tasks):
             logger.info(f"{i}: {task}")
 
@@ -77,6 +77,9 @@ class AndroidWorldBenchmark:
         seed: int = 42,
         task_family: str = "android_world",
         max_steps_multiplier: int = 15,
+        # task params
+        min_task_idx: int = 0,
+        max_task_idx: int = -1,
     ):
         self.env.reset(go_home=True)
         logger.info(
@@ -88,7 +91,7 @@ class AndroidWorldBenchmark:
         logger.debug("Suite reinitialized successfully")
 
         logger.debug("Fetching task list...")
-        task_list = self.env.get_suite_task_list(-1)
+        task_list = self.env.get_suite_task_list(min_task_idx, max_task_idx)
         logger.info(f"Found {len(task_list)} tasks")
         logger.debug("Loading LLM...")
         llm = load_llm(llm_provider, model=llm_model, temperature=temperature)
@@ -257,12 +260,12 @@ def main():
 
     # Task selection arguments
     task_group = parser.add_argument_group("Task Selection")
-    # task_group.add_argument(
-    #    "--task-ids", type=int, nargs="+", help="Task IDs to run (1-116)"
-    # )
-    # task_group.add_argument(
-    #    "--task-names", type=str, nargs="+", help="Task names to run"
-    # )
+    task_group.add_argument(
+        "--min-task-idx", type=int, default=0, help="Minimum task index to run"
+    )
+    task_group.add_argument(
+        "--max-task-idx", type=int, default=-1, help="Maximum task index to run (last task idx + 1)"
+    )
     task_group.add_argument(
         "--list-tasks", action="store_true", help="List available tasks and exit"
     )
@@ -337,6 +340,14 @@ def main():
         device=args.device,
     )
     benchmark.wait_for_env()
+
+    # ensure device is connected
+    device_manager = DeviceManager()
+    device_parts = args.device.split(":")
+    device_host = device_parts[0]
+    device_port = device_parts[1] if len(device_parts) > 1 else 5555
+    asyncio.run(device_manager.connect(device_host, device_port))
+    logger.info(f"Connected to device {args.device}")
     asyncio.run(benchmark.install_portal(args.portal_path))
 
     # Just list tasks if requested
@@ -373,6 +384,9 @@ def main():
             seed=args.seed,
             task_family=args.task_family,
             max_steps_multiplier=args.max_step_multiplier,
+            # task params
+            min_task_idx=args.min_task_idx,
+            max_task_idx=args.max_task_idx,
         )
     )
 

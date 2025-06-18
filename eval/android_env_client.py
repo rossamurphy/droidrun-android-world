@@ -123,10 +123,10 @@ class AndroidEnvClient:
         response.raise_for_status()
         return Response(**response.json())
 
-    def get_suite_task_list(self, max_index: int) -> list[str]:
+    def get_suite_task_list(self, min_index: int = 0, max_index: int = -1) -> list[str]:
         """Gets the list of tasks in the suite."""
         response = requests.get(
-            f"{self.base_url}/suite/task_list", params={"max_index": max_index}
+            f"{self.base_url}/suite/task_list", params={"min_index": min_index, "max_index": max_index}
         )
         response.raise_for_status()
         return response.json()["task_list"]
