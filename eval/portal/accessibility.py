@@ -5,7 +5,7 @@ Accessibility service management for AndroidWorld benchmarks.
 import asyncio
 import logging
 
-PORTAL_SERVICE_NAME = "com.droidrun.portal/com.droidrun.portal.DroidrunPortalService"
+PORTAL_SERVICE_NAME = "'com.google.androidenv.accessibilityforwarder/com.google.androidenv.accessibilityforwarder.AccessibilityForwarder:com.droidrun.portal/com.droidrun.portal.DroidrunPortalService'"
 logger = logging.getLogger("droidrun-portal")
 
 
