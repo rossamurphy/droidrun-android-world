@@ -4,6 +4,7 @@ import logging
 import time
 import textwrap
 import os
+import pathlib
 
 from eval.tools import AndroidWorldTools
 from eval.android_env_client import AndroidEnvClient
@@ -234,7 +235,8 @@ class AndroidWorldBenchmark:
 def main():
     """Main entry point for the benchmark script."""
     parser = argparse.ArgumentParser(
-        description="Run AndroidWorld benchmark tasks with DroidRun"
+        description="Run AndroidWorld benchmark tasks with DroidRun",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     # Benchmark environment configuration
@@ -254,7 +256,7 @@ def main():
     env_group.add_argument(
         "--portal-path",
         type=str,
-        default=os.path.join(os.path.dirname(__file__), "../droidrun-portal.apk"),
+        default=os.path.join(os.getcwd(), "droidrun-portal.apk"),
         help="Path to the droidrun portal APK file",
     )
 
@@ -287,7 +289,7 @@ def main():
     droidrun_group.add_argument(
         "--llm-model",
         type=str,
-        default="models/gemini-2.5-pro-preview-06-05",
+        default="models/gemini-2.5-pro",
         help="Model name to use",
     )
     droidrun_group.add_argument(
