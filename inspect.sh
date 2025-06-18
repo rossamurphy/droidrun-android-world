@@ -1,1 +1,0 @@
-docker run --platform=linux/amd64 --rm -it --entrypoint /bin/bash droidrun/droidrun-android-world:latest 
