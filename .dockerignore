@@ -3,3 +3,8 @@ build.sh
 inspect.sh
 run_benchmark.sh
 droidrun-portal.apk
+eval_results
+*.egg-info
+.venv
+build
+debug_screenshots

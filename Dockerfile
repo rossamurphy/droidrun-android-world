@@ -2,12 +2,16 @@ FROM python:3.12-slim
 
 WORKDIR /opt/shared
 
-COPY . .
-
-RUN pip install .
-
-RUN chmod a+x ./scripts/download-apk.sh && \
+# download droidrun portal apk
+COPY ./scripts/download-apk.sh ./scripts/download-apk.sh
+RUN apt-get update && \
+    apt-get install -y curl adb && \
+    chmod a+x ./scripts/download-apk.sh && \
     ./scripts/download-apk.sh
+
+# install droidrun-android-world cli
+COPY . .
+RUN pip install .
 
 VOLUME ["/opt/shared/eval_results"]
 
