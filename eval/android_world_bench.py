@@ -7,10 +7,16 @@ import os
 
 from eval.tools import AndroidWorldTools
 from eval.android_env_client import AndroidEnvClient
-from eval.tracker import write_task_result, write_task_trajectory, track_task
+from eval.tracker import (
+    write_task_result,
+    write_task_trajectory,
+    track_task,
+    send_discord_exception,
+)
 from eval.portal.accessibility import enable_accessibility_service
 from eval.portal.keepalive import OverlayKeepalive
 
+from llama_index.core.workflow import WorkflowTimeoutError
 from droidrun import DroidAgent, load_llm
 
 logging.basicConfig(
@@ -85,7 +91,7 @@ class AndroidWorldBenchmark:
         task_list = self.env.get_suite_task_list(-1)
         logger.info(f"Found {len(task_list)} tasks")
         logger.debug("Loading LLM...")
-        llm = load_llm(llm_provider, model=llm_model)
+        llm = load_llm(llm_provider, model=llm_model, temperature=temperature)
         logger.debug("LLM loaded successfully")
 
         logger.debug("Initializing droidrun portal keepalive...")
@@ -114,6 +120,9 @@ class AndroidWorldBenchmark:
                 except Exception as e:
                     logger.error(f"Error initializing task {task_name} {task_idx}: {e}")
                     logger.info("Continuing to next task...")
+                    send_discord_exception(
+                        e, "couldn't initialize task", task_name, task_idx, task_goal
+                    )
                     continue
 
                 try:
@@ -129,6 +138,13 @@ class AndroidWorldBenchmark:
                 except Exception as e:
                     logger.error(f"Error enabling accessibility service: {e}")
                     logger.info("Continuing to next task...")
+                    send_discord_exception(
+                        e,
+                        "couldn't enable portal accessibility service",
+                        task_name,
+                        task_idx,
+                        task_goal,
+                    )
                     continue
 
                 logger.info(
@@ -164,6 +180,22 @@ class AndroidWorldBenchmark:
                     write_task_result(
                         task_result, agent, score=score, agent_result=agent_result
                     )
+                except WorkflowTimeoutError as e:
+                    logger.warn(
+                        f"Droidrun timed out for task {task_name} {task_idx}: {e}"
+                    )
+                    score = self.env.get_task_score(task_name, task_idx)
+                    logger.info(f"Task {task_name} {task_idx} score: {score}")
+                    write_task_result(
+                        task_result,
+                        agent,
+                        score=score,
+                        agent_result={
+                            "steps": agent.step_counter,
+                            "success": False,
+                            "reason": f"Timeout after {timeout} seconds",
+                        },
+                    )
                 except Exception as e:
                     logger.error(f"Error completing task {task_name} {task_idx}: {e}")
                     write_task_result(task_result, agent, error=repr(e))
@@ -174,6 +206,13 @@ class AndroidWorldBenchmark:
                         logger.warn(
                             f"Could not write task trajectory for {task_name} {task_idx}: {e}"
                         )
+                        send_discord_exception(
+                            e,
+                            "couldn't save task trajectory",
+                            task_name,
+                            task_idx,
+                            task_goal,
+                        )
 
                 try:
                     logger.debug(f"Tearing down task {task_name} {task_idx}")
@@ -183,6 +222,9 @@ class AndroidWorldBenchmark:
                     logger.error(f"Error tearing down task {task_name} {task_idx}: {e}")
                     logger.info("Continuing to next task...")
                     keepalive.stop()
+                    send_discord_exception(
+                        e, "couldn't tear down task", task_name, task_idx, task_goal
+                    )
                     continue
 
 
