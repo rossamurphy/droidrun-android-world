@@ -1,0 +1,44 @@
+FROM node:lts AS builder
+
+WORKDIR /app
+
+RUN npm i -g node-gyp
+RUN git clone https://github.com/NetrisTV/ws-scrcpy.git .
+RUN npm install
+RUN npm run dist
+
+FROM node:lts AS runner
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y adb
+
+COPY --from=builder /app/dist /app
+RUN npm i
+
+# Create startup script
+RUN cat > /app/startup.sh << 'EOF'
+#!/bin/bash
+
+# Connect to ADB devices if specified
+if [ ! -z "$ADB_DEVICES" ]; then
+  echo "Connecting to ADB devices: $ADB_DEVICES"
+  IFS=',' read -ra DEVICES <<< "$ADB_DEVICES"
+  for device in "${DEVICES[@]}"; do
+    echo "Connecting to $device..."
+    adb connect "$device"
+  done
+  echo "ADB device connections completed"
+  adb devices
+fi
+
+# Start the Node.js application
+echo "Starting ws-scrcpy..."
+exec node index.js
+EOF
+
+RUN chmod +x /app/startup.sh
+
+EXPOSE 8000
+
+CMD ["/app/startup.sh"]
