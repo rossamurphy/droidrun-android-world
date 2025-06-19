@@ -77,6 +77,7 @@ class TaskResult:
     trajectory_stats: TrajectoryStats = field(default_factory=TrajectoryStats)
     device: str = field(default="")
 
+
 OUTPUT_DIR = "eval_results"
 
 
@@ -103,6 +104,7 @@ def write_task_result(
     score: float = 0.0,
     agent_result: Dict[str, Any] | None = None,
     error: str | None = None,
+    device: str = None,
 ):
     logger.debug(
         f"Writing task result for {task_result.task_name} {task_result.task_idx} with score {score}. Agent result: {json.dumps(agent_result)}"
@@ -127,7 +129,8 @@ def write_task_result(
         total_steps=0, execution_steps=0, planning_steps=0
     )
     task_result.reasoning = agent.reasoning
-    task_result.device = agent.device_serial
+    if device is not None:
+        task_result.device = device
 
     dpath = get_task_result_path(task_result.task_name)
     fpath = dpath / "result.json"
@@ -148,11 +151,13 @@ def write_task_trajectory(task_name: str, task_idx: int, agent: DroidAgent):
     trk_path = agent.trajectory.save_trajectory(dpath)
     logger.debug(f"Wrote task {task_name} trajectory to {trk_path}")
 
+
 def get_embed_author(device: str) -> dict:
     return {
-            "name": f"Device: {device}",
-            "url": f"https://supervisor.droidrun.ai/#!action=stream&udid={device}&player=webcodecs&ws=wss%3A%2F%2Fsupervisor.droidrun.ai%2F%3Faction%3Dproxy-adb%26remote%3Dtcp%253A8886%26udid%3D{device}"
-        }
+        "name": f"Device: {device}",
+        "url": f"https://supervisor.droidrun.ai/#!action=stream&udid={device}&player=webcodecs&ws=wss%3A%2F%2Fsupervisor.droidrun.ai%2F%3Faction%3Dproxy-adb%26remote%3Dtcp%253A8886%26udid%3D{device}",
+    }
+
 
 def create_task_result_embed(task_result: TaskResult) -> dict:
     """
@@ -215,7 +220,7 @@ def create_task_result_embed(task_result: TaskResult) -> dict:
         "footer": {
             "text": f"Task Index: {task_result.task_idx} | {len(task_result.logs)} log entries"
         },
-        "author": get_embed_author(task_result.device)
+        "author": get_embed_author(task_result.device),
     }
 
     # Add manual verification notice if there's a mismatch
@@ -274,11 +279,11 @@ def create_suite_exception_embed(
     task_idx: int = None,
     task_goal: str = None,
     device: str = None,
-    timestamp: str = None
+    timestamp: str = None,
 ) -> dict:
     """
     Creates a Discord embed JSON structure for benchmark suite exceptions.
-    
+
     Args:
         ex: The Exception object
         state: Current state when exception occurred (e.g., "task_setup", "initialization", "cleanup")
@@ -286,22 +291,22 @@ def create_suite_exception_embed(
         task_idx: Optional task index if exception is task-specific
         task_goal: Optional task goal/description if exception is task-specific
         timestamp: Optional timestamp, defaults to current time
-        
+
     Returns:
         dict: Discord embed JSON structure
     """
     import traceback
     from datetime import datetime
-    
+
     if timestamp is None:
         timestamp = datetime.now().isoformat()
-    
+
     exception_type = type(ex).__name__
     exception_message = str(ex)
-    
+
     # Always red for suite exceptions
     color = 0xFF0000
-    
+
     # Different emojis based on exception type and state
     if "setup" in exception_type.lower() or "setup" in state.lower():
         status_emoji = "⚙️"
@@ -317,7 +322,7 @@ def create_suite_exception_embed(
         status_emoji = "🧹"
     else:
         status_emoji = "💥"
-    
+
     embed = {
         "title": f"{status_emoji} Benchmark Suite Exception",
         "description": f"**Exception Type:** `{exception_type}`\n**State:** `{state}`",
@@ -327,15 +332,13 @@ def create_suite_exception_embed(
             {
                 "name": "❌ Error Details",
                 "value": f"```\n{exception_message[:1000]}\n```",  # Truncate long messages
-                "inline": False
+                "inline": False,
             }
         ],
-        "footer": {
-            "text": "Benchmark Suite Error"
-        },
-        "author": get_embed_author(device) if device is not None else {}
+        "footer": {"text": "Benchmark Suite Error"},
+        "author": get_embed_author(device) if device is not None else {},
     }
-    
+
     # Add task information if available
     if task_name is not None or task_idx is not None or task_goal is not None:
         task_info = []
@@ -345,27 +348,28 @@ def create_suite_exception_embed(
             task_info.append(f"**Task Name:** {task_name}")
         if task_goal is not None:
             task_info.append(f"**Goal:** {task_goal}")
-        
-        embed["fields"].insert(0, {
-            "name": "🎯 Affected Task",
-            "value": "\n".join(task_info),
-            "inline": True
-        })
-    
+
+        embed["fields"].insert(
+            0,
+            {"name": "🎯 Affected Task", "value": "\n".join(task_info), "inline": True},
+        )
+
     # Add traceback
-    traceback_info = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
+    traceback_info = "".join(traceback.format_exception(type(ex), ex, ex.__traceback__))
     if traceback_info and traceback_info.strip():
         # Truncate traceback to fit Discord limits
         truncated_traceback = traceback_info[:1500]
         if len(traceback_info) > 1500:
             truncated_traceback += "\n... (truncated)"
-        
-        embed["fields"].append({
-            "name": "🔍 Traceback",
-            "value": f"```python\n{truncated_traceback}\n```",
-            "inline": False
-        })
-    
+
+        embed["fields"].append(
+            {
+                "name": "🔍 Traceback",
+                "value": f"```python\n{truncated_traceback}\n```",
+                "inline": False,
+            }
+        )
+
     return embed
 
 
@@ -391,8 +395,17 @@ def send_discord_task_result(result: TaskResult):
     send_discord_embed(embed)
 
 
-def send_discord_exception(ex: Exception, state: str, task_name: str = None, task_idx: int = None, task_goal: str = None, device: str = None):
-    embed = create_suite_exception_embed(ex, state, task_name, task_idx, task_goal, device)
+def send_discord_exception(
+    ex: Exception,
+    state: str,
+    task_name: str = None,
+    task_idx: int = None,
+    task_goal: str = None,
+    device: str = None,
+):
+    embed = create_suite_exception_embed(
+        ex, state, task_name, task_idx, task_goal, device
+    )
     send_discord_embed(embed)
 
 
@@ -429,6 +442,6 @@ if __name__ == "__main__":
             state="task_setup",
             task_name="Web Scraping Challenge",
             task_idx=5,
-            task_goal="Extract product information from e-commerce website"
+            task_goal="Extract product information from e-commerce website",
         )
         send_discord_embed(suite_exception_embed)

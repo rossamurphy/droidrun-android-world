@@ -189,7 +189,7 @@ class AndroidWorldBenchmark:
                     logger.info(f"Task {task_name} {task_idx} score: {score}")
 
                     write_task_result(
-                        task_result, agent, score=score, agent_result=agent_result
+                        task_result, agent, score=score, agent_result=agent_result, device=self.device
                     )
                 except WorkflowTimeoutError as e:
                     logger.warn(
@@ -206,10 +206,11 @@ class AndroidWorldBenchmark:
                             "success": False,
                             "reason": f"Timeout after {timeout} seconds",
                         },
+                        device=self.device,
                     )
                 except Exception as e:
                     logger.error(f"Error completing task {task_name} {task_idx}: {e}")
-                    write_task_result(task_result, agent, error=repr(e))
+                    write_task_result(task_result, agent, error=repr(e), device=self.device)
                 finally:
                     try:
                         write_task_trajectory(task_name, task_idx, agent)
