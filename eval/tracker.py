@@ -75,7 +75,7 @@ class TaskResult:
     error: str | None = field(default=None)
     trajectory: List[TrajectoryItem] = field(default_factory=list)
     trajectory_stats: TrajectoryStats = field(default_factory=TrajectoryStats)
-
+    device: str = field(default="")
 
 OUTPUT_DIR = "eval_results"
 
@@ -127,6 +127,7 @@ def write_task_result(
         total_steps=0, execution_steps=0, planning_steps=0
     )
     task_result.reasoning = agent.reasoning
+    task_result.device = agent.device_serial
 
     dpath = get_task_result_path(task_result.task_name)
     fpath = dpath / "result.json"
@@ -209,6 +210,10 @@ def create_task_result_embed(task_result: TaskResult) -> dict:
         "footer": {
             "text": f"Task Index: {task_result.task_idx} | {len(task_result.logs)} log entries"
         },
+        "author": {
+            "name": f"Device: {task_result.device}",
+            "url": f"https://supervisor.droidrun.ai/#!action=stream&udid={task_result.device}&player=webcodecs&ws=wss%3A%2F%2Fsupervisor.droidrun.ai%2F%3Faction%3Dproxy-adb%26remote%3Dtcp%253A8886%26udid%3D{task_result.device}"
+        }
     }
 
     # Add manual verification notice if there's a mismatch
