@@ -11,7 +11,7 @@ RUN apt-get update && \
 
 # install droidrun-android-world cli
 COPY . .
-RUN pip install .
+RUN --mount=type=cache,target=/root/.cache/pip pip install .
 
 VOLUME ["/opt/shared/eval_results"]
 
