@@ -116,7 +116,7 @@ class AndroidEnvClient:
         action: json_action.JSONAction,
     ) -> Response:
         """Executes an action in the environment."""
-        print(f"Executing action: {action.json_str()}")
+        logger.debug(f"Executing action: {action.json_str()}")
         response = requests.post(
             f"{self.base_url}/execute_action", json=json.loads(action.json_str())
         )
@@ -210,7 +210,7 @@ class AndroidEnvClient:
             response = requests.get(f"{self.base_url}/health")
             response.raise_for_status()
         except Exception as e:  # pylint: disable=broad-exception-caught
-            print(f"Environment is not healthy: {e}")
+            logger.debug(f"Environment is not healthy: {e}")
             return False
         return True
 
