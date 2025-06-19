@@ -4,7 +4,7 @@ import logging
 import time
 import textwrap
 import os
-import pathlib
+import math
 
 from eval.tools import AndroidWorldTools
 from eval.android_env_client import AndroidEnvClient
@@ -78,6 +78,7 @@ class AndroidWorldBenchmark:
         seed: int = 42,
         task_family: str = "android_world",
         max_steps_multiplier: int = 15,
+        timeout_multiplier: int = 300,
         # task params
         min_task_idx: int = 0,
         max_task_idx: int = -1,
@@ -110,12 +111,12 @@ class AndroidWorldBenchmark:
                 task_goal = self.env.get_task_goal(task_name, task_idx)
                 task_complexity = self.env.get_task_complexity(task_name, task_idx)
 
-                max_steps = task_complexity * max_steps_multiplier
-                max_retries = max_steps / 10
-                timeout = task_complexity * 300
+                max_steps = math.ceil(task_complexity * max_steps_multiplier)
+                max_retries = math.ceil(max_steps / 10)
+                timeout = math.ceil(task_complexity * timeout_multiplier)
 
                 logger.info(
-                    f"Initializing Task {task_name} {task_idx} | {task_complexity} -> {max_steps} | {task_goal} within {timeout} seconds"
+                    f"Initializing Task {task_name} {task_idx} | Complexity {task_complexity} -> {max_steps} max steps | {task_goal} within {timeout} seconds"
                 )
 
                 try:
@@ -339,15 +340,14 @@ def main():
         "--max-step-multiplier",
         type=int,
         default=15,
-        help="Used to calculate max steps",
+        help="Used to calculate max steps (complexity * max_step_multiplier)",
     )
-
-    """suite_group.add_argument(
-        "--results-dir",
-        type=str,
-        default="eval_results",
-        help="Directory to save results",
-    )"""
+    suite_group.add_argument(
+        "--timeout-multiplier",
+        type=int,
+        default=300,
+        help="Used to calculate timeout (complexity * timeout_multiplier)",
+    )
 
     args = parser.parse_args()
 
@@ -401,6 +401,7 @@ def main():
             seed=args.seed,
             task_family=args.task_family,
             max_steps_multiplier=args.max_step_multiplier,
+            timeout_multiplier=args.timeout_multiplier,
             # task params
             min_task_idx=args.min_task_idx,
             max_task_idx=args.max_task_idx,
