@@ -148,6 +148,11 @@ def write_task_trajectory(task_name: str, task_idx: int, agent: DroidAgent):
     trk_path = agent.trajectory.save_trajectory(dpath)
     logger.debug(f"Wrote task {task_name} trajectory to {trk_path}")
 
+def get_embed_author(device: str) -> dict:
+    return {
+            "name": f"Device: {device}",
+            "url": f"https://supervisor.droidrun.ai/#!action=stream&udid={device}&player=webcodecs&ws=wss%3A%2F%2Fsupervisor.droidrun.ai%2F%3Faction%3Dproxy-adb%26remote%3Dtcp%253A8886%26udid%3D{device}"
+        }
 
 def create_task_result_embed(task_result: TaskResult) -> dict:
     """
@@ -210,10 +215,7 @@ def create_task_result_embed(task_result: TaskResult) -> dict:
         "footer": {
             "text": f"Task Index: {task_result.task_idx} | {len(task_result.logs)} log entries"
         },
-        "author": {
-            "name": f"Device: {task_result.device}",
-            "url": f"https://supervisor.droidrun.ai/#!action=stream&udid={task_result.device}&player=webcodecs&ws=wss%3A%2F%2Fsupervisor.droidrun.ai%2F%3Faction%3Dproxy-adb%26remote%3Dtcp%253A8886%26udid%3D{task_result.device}"
-        }
+        "author": get_embed_author(task_result.device)
     }
 
     # Add manual verification notice if there's a mismatch
@@ -271,6 +273,7 @@ def create_suite_exception_embed(
     task_name: str = None,
     task_idx: int = None,
     task_goal: str = None,
+    device: str = None,
     timestamp: str = None
 ) -> dict:
     """
@@ -329,7 +332,8 @@ def create_suite_exception_embed(
         ],
         "footer": {
             "text": "Benchmark Suite Error"
-        }
+        },
+        "author": get_embed_author(device) if device is not None else {}
     }
     
     # Add task information if available
@@ -387,8 +391,8 @@ def send_discord_task_result(result: TaskResult):
     send_discord_embed(embed)
 
 
-def send_discord_exception(ex: Exception, state: str, task_name: str = None, task_idx: int = None, task_goal: str = None):
-    embed = create_suite_exception_embed(ex, state, task_name, task_idx, task_goal)
+def send_discord_exception(ex: Exception, state: str, task_name: str = None, task_idx: int = None, task_goal: str = None, device: str = None):
+    embed = create_suite_exception_embed(ex, state, task_name, task_idx, task_goal, device)
     send_discord_embed(embed)
 
 

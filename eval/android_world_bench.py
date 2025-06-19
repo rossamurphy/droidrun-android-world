@@ -125,7 +125,12 @@ class AndroidWorldBenchmark:
                     logger.error(f"Error initializing task {task_name} {task_idx}: {e}")
                     logger.info("Continuing to next task...")
                     send_discord_exception(
-                        e, "couldn't initialize task", task_name, task_idx, task_goal
+                        e,
+                        "couldn't initialize task",
+                        task_name,
+                        task_idx,
+                        task_goal,
+                        self.device,
                     )
                     continue
 
@@ -148,6 +153,7 @@ class AndroidWorldBenchmark:
                         task_name,
                         task_idx,
                         task_goal,
+                        self.device,
                     )
                     continue
 
@@ -216,6 +222,7 @@ class AndroidWorldBenchmark:
                             task_name,
                             task_idx,
                             task_goal,
+                            self.device,
                         )
 
                 try:
@@ -227,7 +234,12 @@ class AndroidWorldBenchmark:
                     logger.info("Continuing to next task...")
                     keepalive.stop()
                     send_discord_exception(
-                        e, "couldn't tear down task", task_name, task_idx, task_goal
+                        e,
+                        "couldn't tear down task",
+                        task_name,
+                        task_idx,
+                        task_goal,
+                        self.device,
                     )
                     continue
 
@@ -236,7 +248,7 @@ def main():
     """Main entry point for the benchmark script."""
     parser = argparse.ArgumentParser(
         description="Run AndroidWorld benchmark tasks with DroidRun",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     # Benchmark environment configuration
@@ -266,7 +278,10 @@ def main():
         "--min-task-idx", type=int, default=0, help="Minimum task index to run"
     )
     task_group.add_argument(
-        "--max-task-idx", type=int, default=-1, help="Maximum task index to run (last task idx + 1)"
+        "--max-task-idx",
+        type=int,
+        default=-1,
+        help="Maximum task index to run (last task idx + 1)",
     )
     task_group.add_argument(
         "--list-tasks", action="store_true", help="List available tasks and exit"
