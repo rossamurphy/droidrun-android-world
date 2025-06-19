@@ -41,7 +41,6 @@ class AndroidWorldBenchmark:
         self.device = device
         self.base_url = base_url
         self.env = AndroidEnvClient(base_url)
-        self.tools = AndroidWorldTools(device, self.env)
 
     def wait_for_env(self):
         logger.debug("Waiting for environment to be healthy...")
@@ -61,7 +60,9 @@ class AndroidWorldBenchmark:
 
     async def install_portal(self, portal_apk: str):
         logger.info(f"Installing {portal_apk}...")
-        await self.tools.install_app(portal_apk, reinstall=True)
+        device_manager = DeviceManager()
+        device = await device_manager.get_device(self.device)
+        await device.install_app(portal_apk, reinstall=True)
         logger.info("Portal installed successfully")
 
     async def run(
@@ -162,10 +163,11 @@ class AndroidWorldBenchmark:
                     f"Initializing DroidAgent with {max_steps} steps, {max_retries} retries, and {timeout} timeout"
                 )
 
+                tools = AndroidWorldTools(self.device, self.env)
                 agent = DroidAgent(
                     task_goal,
                     llm,
-                    self.tools,
+                    tools,
                     reasoning=reasoning,
                     enable_tracing=tracing,
                     debug=debug,
@@ -189,7 +191,11 @@ class AndroidWorldBenchmark:
                     logger.info(f"Task {task_name} {task_idx} score: {score}")
 
                     write_task_result(
-                        task_result, agent, score=score, agent_result=agent_result, device=self.device
+                        task_result,
+                        agent,
+                        score=score,
+                        agent_result=agent_result,
+                        device=self.device,
                     )
                 except WorkflowTimeoutError as e:
                     logger.warn(
@@ -210,7 +216,9 @@ class AndroidWorldBenchmark:
                     )
                 except Exception as e:
                     logger.error(f"Error completing task {task_name} {task_idx}: {e}")
-                    write_task_result(task_result, agent, error=repr(e), device=self.device)
+                    write_task_result(
+                        task_result, agent, error=repr(e), device=self.device
+                    )
                 finally:
                     try:
                         write_task_trajectory(task_name, task_idx, agent)
