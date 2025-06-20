@@ -71,6 +71,7 @@ class AndroidWorldBenchmark:
         llm_provider: str,
         llm_model: str,
         reasoning: bool = True,
+        reflection: bool = False,
         temperature: float = 0.5,
         tracing: bool = False,
         debug: bool = False,
@@ -83,6 +84,7 @@ class AndroidWorldBenchmark:
         # task params
         min_task_idx: int = 0,
         max_task_idx: int = -1,
+        tasks: list[str] = [],
     ):
         self.env.reset(go_home=True)
         logger.info(
@@ -94,7 +96,11 @@ class AndroidWorldBenchmark:
         logger.debug("Suite reinitialized successfully")
 
         logger.debug("Fetching task list...")
-        task_list = self.env.get_suite_task_list(min_task_idx, max_task_idx)
+        if len(tasks) > 0:
+            all_tasks = self.env.get_suite_task_list()
+            task_list = [task for task in tasks if task in all_tasks]
+        else:
+            task_list = self.env.get_suite_task_list(min_task_idx, max_task_idx)
         logger.info(f"Found {len(task_list)} tasks")
         logger.debug("Loading LLM...")
         llm = load_llm(llm_provider, model=llm_model, temperature=temperature)
@@ -173,7 +179,7 @@ class AndroidWorldBenchmark:
                     max_steps=max_steps,
                     timeout=timeout,
                     save_trajectories=False,
-                    reflection=True,
+                    reflection=reflection,
                     device_serial=self.device,
                 )
 
@@ -294,6 +300,12 @@ def main():
         help="Maximum task index to run (last task idx + 1)",
     )
     task_group.add_argument(
+        "--tasks",
+        type=str,
+        nargs="+",
+        help="Tasks to run",
+    )
+    task_group.add_argument(
         "--list-tasks", action="store_true", help="List available tasks and exit"
     )
     task_group.add_argument(
@@ -322,6 +334,11 @@ def main():
     )
     droidrun_group.add_argument(
         "--reasoning", action="store_true", help="Enable reasoning for LLM"
+    )
+    droidrun_group.add_argument(
+        "--reflection",
+        action="store_true",
+        help="Enable reflection for Droidrun",
     )
     droidrun_group.add_argument(
         "--tracing",
@@ -402,6 +419,7 @@ def main():
             llm_provider=args.llm_provider,
             llm_model=args.llm_model,
             reasoning=args.reasoning,
+            reflection=args.reflection,
             temperature=args.temperature,
             tracing=args.tracing,
             debug=args.debug,
@@ -414,6 +432,7 @@ def main():
             # task params
             min_task_idx=args.min_task_idx,
             max_task_idx=args.max_task_idx,
+            tasks=args.tasks,
         )
     )
 
