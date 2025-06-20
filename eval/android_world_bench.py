@@ -113,7 +113,6 @@ class AndroidWorldBenchmark:
                 task_complexity = self.env.get_task_complexity(task_name, task_idx)
 
                 max_steps = math.ceil(task_complexity * max_steps_multiplier)
-                max_retries = math.ceil(max_steps / 10)
                 timeout = math.ceil(task_complexity * timeout_multiplier)
 
                 logger.info(
@@ -160,7 +159,7 @@ class AndroidWorldBenchmark:
                     continue
 
                 logger.info(
-                    f"Initializing DroidAgent with {max_steps} steps, {max_retries} retries, and {timeout} timeout"
+                    f"Initializing DroidAgent with {max_steps} steps and {timeout} timeout"
                 )
 
                 tools = AndroidWorldTools(self.device, self.env)
@@ -172,9 +171,10 @@ class AndroidWorldBenchmark:
                     enable_tracing=tracing,
                     debug=debug,
                     max_steps=max_steps,
-                    max_retries=max_retries,
                     timeout=timeout,
                     save_trajectories=False,
+                    reflection=True,
+                    device_serial=self.device,
                 )
 
                 logger.debug("DroidAgent initialized successfully")

@@ -5,6 +5,7 @@ from android_world.env import json_action
 import logging
 
 logger = logging.getLogger("android_world_tools")
+logger.level = logging.DEBUG
 
 
 class AndroidWorldTools(AdbTools):
@@ -13,7 +14,7 @@ class AndroidWorldTools(AdbTools):
         super().__init__(serial)
         logger.debug("AdbTools initialized")
         self.client = client or AndroidEnvClient()
-        logger.debug("AndroidWorldTools initialized")
+        logger.debug(f"AndroidWorldTools initialized with {self.client.base_url}")
 
     def complete(self, success: bool, reason: str = "") -> bool:
         """
@@ -27,8 +28,14 @@ class AndroidWorldTools(AdbTools):
             self.client.execute_action(
                 json_action.JSONAction(action_type="answer", text=reason)
             )
+            self.client.execute_action(
+                json_action.JSONAction(action_type="status", goal_status="completed")
+            )
         else:
             self.success = False
+            self.client.execute_action(
+                json_action.JSONAction(action_type="status", goal_status="failed")
+            )
             if not reason:
                 raise ValueError("Reason for failure is required if success is False.")
             self.reason = reason
