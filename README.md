@@ -1,6 +1,6 @@
 # DroidRun Evaluation with AndroidWorld
 
-This module provides tools for benchmarking DroidRun using the [AndroidWorld](https://github.com/google-research/android_world) task suite - a collection of 116 diverse tasks across 20 Android applications.
+This module provides tools for benchmarking DroidRun using the [AndroidWorld](https://github.com/droidrun/android_world) ([upstream](https://github.com/google-research/android_world)) task suite - a collection of 116 diverse tasks across 20 Android applications.
 
 ## Local Setup
 
@@ -23,9 +23,8 @@ This module provides tools for benchmarking DroidRun using the [AndroidWorld](ht
    git clone https://github.com/droidrun/droidrun-android-world && \
    cd droidrun-android-world
 
-   # initialize submodules (android_world + droidrun) + patch android_world setup script
-   git submodule update --init && \
-   ./scripts/patch-android-wrld.sh ./android_world
+   # initialize submodules (android_world + droidrun)
+   git submodule update --init
 
    # optionally create a virtual environment beforehand
    pip install .
@@ -55,19 +54,10 @@ This module provides tools for benchmarking DroidRun using the [AndroidWorld](ht
    export OPENAI_API_KEY=your-key  # Or other provider keys
    ```
 
-7. **Important: Initial Emulator Setup**
-   
-   The first time you run any AndroidWorld benchmark, you **MUST** perform the initial emulator setup to install necessary apps and configure permissions:
-   
+7. **Important: Start Android World Environment**
    ```bash
-   # Using our helper script
-   ./run_benchmark.sh --task-ids 1 --setup
-   
-   # Or with the Python module directly
-   droidrun-android-world --task-ids 1 --perform-emulator-setup
+   cd android_world && python -m server.android_server
    ```
-   
-   This is a one-time setup process that may take several minutes depending on your connection speed. It will install all the necessary apps and configure permissions required by AndroidWorld tasks.
 
 ## Docker setup
 
@@ -120,7 +110,6 @@ For more details, see the [KVM documentation](https://www.linux-kvm.org/page/Mai
 alias droidrun-android-world='docker run --rm -it --name droidrun-android-world \
    --platform linux/amd64 --device /dev/kvm \
    -v ./eval_results:/opt/shared/eval_results \
-   -v ./trajectories:/opt/shared/trajectories \
    ${OPENAI_API_KEY:+-e OPENAI_API_KEY} \
    ${GEMINI_API_KEY:+-e GEMINI_API_KEY} \
    ${ANTHROPIC_API_KEY:+-e ANTHROPIC_API_KEY} \
@@ -132,16 +121,16 @@ alias droidrun-android-world='docker run --rm -it --name droidrun-android-world 
 
 ### Basic Usage
 
-Run a specific task by ID:
+Run a specific task by index:
 
 ```bash
-droidrun-android-world --task-ids 1
+droidrun-android-world --min-task-idx 0 --max-task-idx 1
 ```
 
 Run a specific task by name:
 
 ```bash
-droidrun-android-world --task-names ContactsAddContact
+droidrun-android-world --tasks ContactsAddContact
 ```
 
 ### List Available Tasks
@@ -156,74 +145,13 @@ droidrun-android-world --list-tasks
 
 ```bash
 # Run with a different LLM provider and model
-droidrun-android-world --task-ids 1 2 3 --llm-provider Anthropic --llm-model claude-3-sonnet-20240229
+droidrun-android-world --llm-provider Anthropic --llm-model claude-3-sonnet-20240229
 
-# Run with initial emulator setup (first time only)
-droidrun-android-world --task-ids 1 --perform-emulator-setup
-
-# Set maximum steps per task
-droidrun-android-world --task-ids 1 --max-steps 100
+# Set maximum steps per task: multiplier * task complexity
+droidrun-android-world --max-step-multiplier 15
 
 # Run multiple parameter combinations per task
-droidrun-android-world --task-ids 1 --n-task-combinations 3
-
-# Specify a custom accessibility service name (if different from default)
-droidrun-android-world --task-ids 1 --portal-service "com.example.customportal/com.example.customportal.AccessibilityService"
-```
-
-### Full Usage Options
-
-```
-usage: android_world_bench.py [-h] [--task-ids TASK_IDS [TASK_IDS ...]]
-                             [--task-names TASK_NAMES [TASK_NAMES ...]]
-                             [--list-tasks]
-                             [--n-task-combinations N_TASK_COMBINATIONS]
-                             [--llm-provider LLM_PROVIDER]
-                             [--llm-model LLM_MODEL] [--temperature TEMPERATURE]
-                             [--adb-path ADB_PATH] [--console-port CONSOLE_PORT]
-                             [--perform-emulator-setup]
-                             [--portal-service PORTAL_SERVICE]
-                             [--random-seed RANDOM_SEED]
-                             [--results-dir RESULTS_DIR] [--max-steps MAX_STEPS]
-                             [--task-family TASK_FAMILY]
-
-Run AndroidWorld benchmark tasks with DroidRun
-
-Task Selection:
-  --task-ids TASK_IDS [TASK_IDS ...]
-                        Task IDs to run (1-116)
-  --task-names TASK_NAMES [TASK_NAMES ...]
-                        Task names to run
-  --list-tasks         List available tasks and exit
-  --n-task-combinations N_TASK_COMBINATIONS
-                        Number of parameter combinations per task
-
-LLM Configuration:
-  --llm-provider LLM_PROVIDER
-                        LLM provider (OpenAI, Anthropic, Gemini, etc.)
-  --llm-model LLM_MODEL
-                        Model name to use
-  --temperature TEMPERATURE
-                        Temperature for LLM sampling
-
-Environment Configuration:
-  --adb-path ADB_PATH   Path to ADB executable
-  --console-port CONSOLE_PORT
-                        Emulator console port
-  --perform-emulator-setup
-                        Perform initial emulator setup (install apps, set permissions)
-  --portal-service PORTAL_SERVICE
-                        Name of the DroidRun accessibility service
-
-Benchmark Configuration:
-  --random-seed RANDOM_SEED
-                        Random seed for reproducibility
-  --results-dir RESULTS_DIR
-                        Directory to save results
-  --max-steps MAX_STEPS
-                        Maximum steps per task
-  --task-family TASK_FAMILY
-                        Task family to benchmark
+droidrun-android-world --n-task-combinations 3
 ```
 
 ## Results
